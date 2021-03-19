@@ -1,0 +1,259 @@
+function dmarc($mail, $ipaddr, $helo, $mfrom)
+{
+	$result = [];
+	$headers = $mail->getHeaders("from");
+	if (length($headers) == 0)
+	{
+		$result["result"] = "permerror";
+		$result["reason"] = "No [MAIL].From header";
+		return $result;
+	}
+	if (length($headers) > 1)
+	{
+		$result["result"] = "permerror";
+		$result["reason"] = "Too many [MAIL].From headers";
+		return $result;
+	}
+
+	$fromAddresses = header_addresslist_extract($headers[0]);
+	if ($fromAddresses === none)
+	{
+		$result["result"] = "permerror";
+		$result["reason"] = "Bad [MAIL].From address";
+		return $result;
+	}
+	if (length($fromAddresses) == 0)
+	{
+		$result["result"] = "permerror";
+		$result["reason"] = "No [MAIL].From address";
+		return $result;
+	}
+	if (length($fromAddresses) > 1)
+	{
+		$result["result"] = "permerror";
+		$result["reason"] = "Too many [MAIL].From addresses";
+		return $result;
+	}
+	$split = str_split($fromAddresses[0], "@", -2);
+	if (length($split) != 2 or $split[1] == "")
+	{
+		$result["result"] = "permerror";
+		$result["reason"] = "Bad [MAIL].From address: no domain";
+		return $result;
+	}
+	$senderdomain = str_lower($split[1]);
+	$helo = str_lower($helo);
+	$mfrom = str_lower($mfrom);
+
+	$result["from"] = $senderdomain;
+	$result["pdomain"] = $senderdomain;
+	$info = [];
+
+	$lookup = dns_query("_dmarc." . $senderdomain, ["type" => "txt"]);
+	$domainOrg = none;
+
+	if (!$lookup["result"] or !($tagList = getValidDMARCRecord($lookup["result"])))
+	{
+		$domainOrg = organizationalDomain($senderdomain);
+		if (!$domainOrg)
+		{
+			if ($lookup["error"] == "SERVFAIL" or $lookup["error"] == "TRY_AGAIN")
+			{
+				$result["result"] = "temperror";
+				$result["reason"] = "DMARC TXT record resolving: ". $lookup["error"];
+				return $result;
+			}
+			$result["result"] = "policy_absent";
+			$result["reason"] = "No valid DMARC record";
+			return $result;
+		}
+		$result["pdomain"] = $domainOrg;
+
+		$lookup = dns_query("_dmarc." . $domainOrg, ["type" => "txt"]);
+		if (!$lookup["result"])
+		{
+			if ($lookup["error"] == "SERVFAIL" or $lookup["error"] == "TRY_AGAIN")
+			{
+				$result["result"] = "temperror";
+				$result["reason"] = "DMARC TXT record resolving: ". $lookup["error"];
+				return $result;
+			}
+			$result["result"] = "policy_absent";
+			$result["reason"] = "No valid DMARC record";
+			return $result;
+		}
+
+		if (!($tagList = getValidDMARCRecord($lookup["result"])))
+		{
+			$result["result"] = "policy_absent";
+			$result["reason"] = "No valid DMARC record";
+			return $result;
+		}
+		$result["dmarc"] = $tagList;
+	}
+	else
+		$result["dmarc"] = $tagList;
+
+	$tagp = $domainOrg ? $tagList["sp"] ?? $tagList["p"] : $tagList["p"];
+	if (!$tagp)
+	{
+		$result["result"] = "policy_absent";
+		$result["reason"] = "p= is missing";
+		return $result;
+	}
+
+	$strictSPF = $tagList["aspf"] == "s";
+	$strictDKIM = $tagList["adkim"] == "s";
+	$pct = $tagList["pct"] ? number($tagList["pct"]) : 100;
+
+	$passSPF = false; $passDKIM = false;
+	$checkSPF = false; $checkDKIM = false;
+
+	if (checkIdentifierAligment($mfrom ? $mfrom : $helo, $senderdomain, $strictSPF)) {
+		$checkSPF = true;
+		$spf = spf_query($ipaddr, $helo, $mfrom);
+		if ($spf["result"] == "pass")
+			$passSPF = true;
+		$result["spf"] = $spf;
+	}
+
+	foreach ($mail->getHeaders("DKIM-Signature") as $x => $header)
+	{
+		$dkim = header_dkim_decode($header);
+		if (!$dkim or !$dkim["d"])
+			continue;
+		$dkimdomain = str_lower($dkim["d"]);
+		if (!checkIdentifierAligment($dkimdomain, $senderdomain, $strictDKIM))
+			continue;
+
+		$checkDKIM = true;
+		$r = $mail->verifyDKIM($mail->getHeader("DKIM-Signature", ["index" => $x, "field" => true]));
+
+		$result["dkim"][] = $r;
+		if ($r["result"] == "pass")
+		{
+			$passDKIM = true;
+			break;
+		}
+	}
+
+	$selected = ($pct == 100 or rand(0, 100) < $pct);
+	$result["pct-selected"] = $selected;
+
+	$action = "pass";
+	if (!$passSPF and !$passDKIM) {
+		if ($tagp == "reject")
+			$action = $selected ? "reject" : "quarantine";
+		else if ($tagp == "quarantine")
+			$action = $selected ? "quarantine" : "none";
+		else if ($tagp == "none")
+			$action = "none";
+		else
+			$action = "none";
+	}
+
+	$result["spf_align"] = $checkSPF ? ($passSPF ? "pass": "fail") : "unaligned";
+	$result["dkim_align"] = $checkDKIM ? ($passDKIM ? "pass": "fail") : "unaligned";
+	$result["result"] = $action;
+	$result["policy"] = $tagp;
+
+	return $result;
+}
+
+function organizationalDomain($domain)
+{
+	$publicSuffix = domain_publicsuffix($domain);
+	if ($publicSuffix == none)
+		return none;
+
+	$domainParts = str_split($domain, ".");
+	$domainTLD = str_split($publicSuffix, ".");
+	if (length($domainTLD) == length($domainParts))
+		return none;
+
+	$domainOrg = array_join($domainParts[-length($domainTLD) - 1:], ".");
+	if ($domainOrg == $domain)
+		return none;
+	
+	return $domainOrg;
+}
+
+function checkIdentifierAligment($domain1, $domain2, $strict)
+{
+	if ($strict)
+		return $domain1 == $domain2;
+
+	$domainOrg1 = organizationalDomain($domain1);
+	$domainOrg1 = $domainOrg1 ?? $domain1;
+	$domainOrg2 = organizationalDomain($domain2);
+	$domainOrg2 = $domainOrg2 ?? $domain2;
+
+	return $domainOrg1 == $domainOrg2;
+}
+
+function getValidDMARCRecord($records)
+{
+	foreach ($records as $r)
+	{
+		$x = header_dkim_decode($r);
+		if (isset($x["v"]) and $x["v"] == "DMARC1")
+			return $x;
+	}
+	return none;
+}
+
+function domain_publicsuffix($domain)
+{
+	$rules = memory_fetch("public_suffix_list.dat", function ($k) {
+			$rules = Set("string");
+			$file = File("file://public_suffix_list.dat");
+			if (!$file)
+				return false;
+			while (is_string($line = $file->readline()))
+			{
+				$line = str_strip($line);
+				if ($line[0] == "/" or $line == "")
+					continue;
+				$rules->add($line);
+			}
+			memory_store("public_suffix_list.dat", $rules);
+			return $rules;
+		});
+	if (!$rules)
+	{
+		echo "Could not load public suffix rules";
+		return none;
+	}
+
+	$domain = array_reverse(str_split(str_lower($domain), "."));
+	$tld = [];
+	$segments = "";
+	$wildcard = "";
+
+	for ($i = 0; $i < length($domain); ++$i)
+	{
+		$wildcard = "*" . ($segments != "" ? "." . $segments : "");
+		$segments = $domain[$i] . ($segments != "" ? "." . $segments : "");
+
+		if ($rules->has("!" . $segments))
+		{
+			$tld = $domain[0:$i];
+			break;
+		}
+		if ($rules->has($wildcard))
+		{
+			$tld = $domain[0:$i + 1];
+			continue;
+		}
+		if ($rules->has($segments))
+		{
+			$tld = $domain[0:$i + 1];
+			continue;
+		}
+	}
+
+	if (!$tld)
+		return none;
+
+	return array_join(array_reverse($tld), ".");
+}
