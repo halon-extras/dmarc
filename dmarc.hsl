@@ -108,12 +108,15 @@ function dmarc($mail, $ipaddr, $helo, $mfrom)
 
 	$passSPF = false; $passDKIM = false;
 	$checkSPF = false; $checkDKIM = false;
+	$temperrorSPF = false; $temperrorDKIM = false;
 
 	if (checkIdentifierAligment($mfrom ? $mfrom : $helo, $senderdomain, $strictSPF)) {
 		$checkSPF = true;
 		$spf = spf_query($ipaddr, $helo, $mfrom);
 		if ($spf["result"] == "pass")
 			$passSPF = true;
+		if ($spf["result"] == "temperror")
+			$temperrorSPF = true;
 		$result["spf"] = $spf;
 	}
 
@@ -135,6 +138,8 @@ function dmarc($mail, $ipaddr, $helo, $mfrom)
 			$passDKIM = true;
 			break;
 		}
+		if ($r["result"] == "temperror")
+			$temperrorDKIM = true;
 	}
 
 	$selected = ($pct == 100 or rand(0, 100) < $pct);
@@ -142,7 +147,9 @@ function dmarc($mail, $ipaddr, $helo, $mfrom)
 
 	$action = "pass";
 	if (!$passSPF and !$passDKIM) {
-		if ($tagp == "reject")
+		if ($temperrorSPF or $temperrorDKIM)
+			$action = "temperror";
+		else if ($tagp == "reject")
 			$action = $selected ? "reject" : "quarantine";
 		else if ($tagp == "quarantine")
 			$action = $selected ? "quarantine" : "none";
