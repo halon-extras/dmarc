@@ -17,10 +17,21 @@ apt-get install halon-extras-dmarc
 yum install halon-extras-dmarc
 ```
 
-## Usage
+## Exported functions
+
+### dmarc(fp[, senderip, senderhelo, senderdomain])
+
+**Params**
+
+- fp `File` - the mail file
+- senderip `string` - the sender's IP
+- senderhelo `string` - the sender's HELO
+- senderdomain `string` - the sender's domain
+
+**Example (EOD)**
 
 ```
 import { dmarc } from "extras://dmarc";
 
-$result = dmarc($mail, $senderip, $senderhelo, $senderdomain);
+$result = dmarc($arguments["mail"], $connection["remoteip"], $connection["helo"]["host"], $transaction["senderaddress"]["domain"]);
 ```
