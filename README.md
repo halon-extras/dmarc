@@ -19,6 +19,8 @@ yum install halon-extras-dmarc
 
 ## Exported functions
 
+These functions needs to be [imported](https://docs.halon.io/hsl/structures.html#import) from the `extras://dmarc` module path.
+
 ### dmarc(fp[, senderip, senderhelo, senderdomain])
 
 **Params**
