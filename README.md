@@ -1,4 +1,4 @@
-## Domain-based Message Authentication, Reporting & Conformance (DMARC) 
+# Domain-based Message Authentication, Reporting & Conformance (DMARC) 
 An DMARC implementation written in HSL
 
 ## Installation
