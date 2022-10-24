@@ -42,8 +42,8 @@ function dmarc($mail, $ipaddr, $helo, $mfrom)
 		return $result;
 	}
 	$senderdomain = str_lower($split[1]);
-	$helo = str_lower($helo);
-	$mfrom = str_lower($mfrom);
+	$helo = str_lower($helo ?? "");
+	$mfrom = str_lower($mfrom ?? "");
 
 	$result["from"] = $senderdomain;
 	$result["pdomain"] = $senderdomain;
