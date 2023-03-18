@@ -37,3 +37,26 @@ import { dmarc } from "extras://dmarc";
 
 $result = dmarc($arguments["mail"], $connection["remoteip"], $connection["helo"]["host"], $transaction["senderaddress"]["domain"]);
 ```
+
+**Returns**
+
+The dmarc functions returns an array of values, it will always contain a ``result`` property. Depending on where the DMARC validation fail, other fields may also be populated. ``result`` property may contain the following results (with recommended actions).
+
+* `permerror` (reject)
+* `temperror` (defer)
+* `policy_absent` (accept)
+* `reject` (reject)
+* `quarantine` (quarantine/reject)
+* `none` (accept)
+* `pass` (accept)
+
+Other properties are
+
+* `reason` (string) textual reason why the result was given (not always available)
+* `spf` (array) spf_query() result object
+* `dkim` (array) array of MailMessage.verifyDKIM results
+* `dmarc` (array) DMARC record
+* `pct-selected` (boolean) if the policy action was choose based on pct
+* `spf_align` ("pass", "fail", "unaligned")
+* `dkim_align` ("pass", "fail", "unaligned")
+* `policy` (string) the tag-p policy used
