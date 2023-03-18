@@ -50,9 +50,9 @@ The dmarc functions returns an array of values, it will always contain a ``resul
 * `none` (accept)
 * `pass` (accept)
 
-Other properties are
+Other properties are (not always available)
 
-* `reason` (string) textual reason why the result was given (not always available)
+* `reason` (string) textual reason why the result was given
 * `spf` (array) spf_query() result object
 * `dkim` (array) array of MailMessage.verifyDKIM results
 * `dmarc` (array) DMARC record
