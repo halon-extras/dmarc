@@ -53,6 +53,8 @@ The dmarc functions returns an array of values, it will always contain a ``resul
 Other properties are (not always available)
 
 * `reason` (string) textual reason why the result was given
+* `from` (string) the message from header used
+* `pdomain` (string) the policy domain used (may be other than from)
 * `spf` (array) spf_query() result object
 * `dkim` (array) array of MailMessage.verifyDKIM results
 * `dmarc` (array) DMARC record
