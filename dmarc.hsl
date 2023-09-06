@@ -1,7 +1,7 @@
 function dmarc($mail, $ipaddr, $helo, $mfrom)
 {
 	$result = [];
-	$headers = $mail->getHeaders("from");
+	$headers = $mail->getHeaders("from", ["decode" => false]);
 	if (length($headers) == 0)
 	{
 		$result["result"] = "permerror";
