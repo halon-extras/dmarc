@@ -41,7 +41,13 @@ function dmarc($mail, $ipaddr, $helo, $mfrom)
 		$result["reason"] = "Bad [MAIL].From address: no domain";
 		return $result;
 	}
-	$senderdomain = str_lower($split[1]);
+	$senderdomain = idna_encode(str_lower($split[1]));
+	if (!$senderdomain)
+	{
+		$result["result"] = "permerror";
+		$result["reason"] = "Bad [MAIL].From domain";
+		return $result;
+	}
 	$helo = str_lower($helo ?? "");
 	$mfrom = str_lower($mfrom ?? "");
 
@@ -125,7 +131,9 @@ function dmarc($mail, $ipaddr, $helo, $mfrom)
 		$dkim = header_dkim_decode($header);
 		if (!$dkim or !$dkim["d"])
 			continue;
-		$dkimdomain = str_lower($dkim["d"]);
+		$dkimdomain = idna_encode(str_lower($dkim["d"]));
+		if (!$dkimdomain)
+			continue;
 		if (!checkIdentifierAligment($dkimdomain, $senderdomain, $strictDKIM))
 			continue;
 
