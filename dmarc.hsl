@@ -211,8 +211,21 @@ function getValidDMARCRecord($records)
 	foreach ($records as $r)
 	{
 		$x = header_dkim_decode($r);
-		if (isset($x["v"]) and $x["v"] == "DMARC1")
-			return $x;
+		$r = [];
+		if (is_array($x))
+		{
+			foreach ($x as $k => $v)
+			{
+				$k = str_lower($k);
+				$r[$k] = match ($k) {
+					"v" => $v, /* case sensitive */
+					"adkim", "aspf", "fo", "p", "rf", "sp" => str_lower($v),
+					default => $v /* other fields, leave as is for now... */
+				};
+			}
+		}
+		if (isset($r["v"]) and $r["v"] == "DMARC1")
+			return $r;
 	}
 	return none;
 }
