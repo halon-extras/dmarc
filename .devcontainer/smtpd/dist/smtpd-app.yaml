@@ -1,0 +1,6 @@
+scripting:
+  files: []
+servers:
+- id: default
+  transport: mx
+version: '6.1'
