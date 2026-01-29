@@ -177,6 +177,8 @@ function dmarc($mail, $ipaddr, $helo, $mfrom)
 	return $result;
 }
 
+// work in progress: to be officially released
+
 function dmarc_ruf_candidate($dmarc)
 {
 	if ($dmarc["result"] == "policy_absent" or
@@ -230,7 +232,7 @@ function dmarc_ruf_addresses($dmarc)
 	return ["result" => $addresses];
 }
 
-function dmarc_ruf_report($dmarc, $ip, $mfrom, $rcptto, $ts, $mail, $options = [])
+function dmarc_ruf_report($dmarc, $ip, $mfrom, $rcpttos, $ts, $mail, $options = [])
 {
 	$report = MIME();
 	$report->setType("message/feedback-report");
@@ -253,7 +255,13 @@ function dmarc_ruf_report($dmarc, $ip, $mfrom, $rcptto, $ts, $mail, $options = [
 	$headers->addHeader("Authentication-Results", AuthenticationResults()->DMARC($dmarc)->toString(["multiline" => false]));
 	$headers->addHeader("Source-IP", $ip);
 	$headers->addHeader("Arrival-Date", strftime("%a, %d %b %Y %X %z", $ts));
-	$headers->addHeader("Original-Rcpt-To", "<".envelope_localpart_escape($rcptto["localpart"])."@".$rcptto["domain"].">");
+	foreach ($rcpttos as $rcptto)
+	{
+		if (is_string($rcptto))
+			$headers->addHeader("Original-Rcpt-To", "<".$rcptto.">");
+		else
+			$headers->addHeader("Original-Rcpt-To", "<".envelope_localpart_escape($rcptto["localpart"])."@".$rcptto["domain"].">");
+	}
 	if (!$mfrom["localpart"])
 		$headers->addHeader("Original-Mail-From", "<>");
 	else
