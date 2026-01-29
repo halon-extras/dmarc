@@ -1,1 +1,1 @@
-import { dmarc } from "./dmarc.hsl";
+import { dmarc, dmarc_ruf_candidate, dmarc_ruf_addresses, dmarc_ruf_report } from "./dmarc.hsl";
