@@ -1,3 +1,5 @@
+import { AuthenticationResults } from "extras://authentication-results";
+
 function dmarc($mail, $ipaddr, $helo, $mfrom)
 {
 	$result = [];
@@ -173,6 +175,97 @@ function dmarc($mail, $ipaddr, $helo, $mfrom)
 	$result["policy"] = $tagp;
 
 	return $result;
+}
+
+function dmarc_ruf_candidate($dmarc)
+{
+	if ($dmarc["result"] == "policy_absent" or
+		$dmarc["result"] == "none" or
+		$dmarc["result"] == "accept")
+		return ["result" => false, "reason" => "pass: no report to send"];
+	if (!$dmarc["dmarc"]["ruf"])
+		return ["result" => false, "reason" => "ruf is not specified"];
+	if ($dmarc["dmarc"]["rf"] ?? "afrf" != "afrf")
+		return ["result" => false, "reason" => "unsupported report format"];
+	$report = false;
+	foreach (str_split($dmarc["dmarc"]["fo"] ?? "0", ",") as $fo)
+	{
+		switch ($fo)
+		{
+			case "0":
+				if ($dmarc["spf_align"] != "pass" or $dmarc["dkim_align"] != "pass")
+					$report = true;
+			break;
+			case "1":
+				if ($dmarc["spf_align"] != "pass" and $dmarc["dkim_align"] != "pass")
+					$report = true;
+			break;
+			case "d":
+			case "s":
+				return ["error" => "unsupported reporting"];
+		}
+		if ($report)
+			break;
+	}
+	if (!$report)
+		return ["result" => false, "reason" => "not report to sent based on failure reporting options"];
+	return ["result" => true];
+}
+
+function dmarc_ruf_addresses($dmarc)
+{
+	$addresses = [];
+	if ($dmarc["dmarc"]["ruf"])
+		$addresses = array_map(function($str) { return envelope_address_parse($str[7:]); }, array_filter(function ($str) { return $str[0:7] == "mailto:"; }, str_split($dmarc["dmarc"]["ruf"], ",")));
+	$addresses = array_filter(function($address) closure ($dmarc) {
+			if (!$address)
+				return false;
+			if ($dmarc["pdomain"] == $address["domain"])
+				return true;
+			$dns = dns_query($dmarc["pdomain"]."._report._dmarc.".$address["domain"], ["type" => "txt"]);
+			if (header_dkim_decode($dns["result"][0])["v"] != "DMARC1")
+				return false;
+			return true;
+		}, $addresses);
+	return ["result" => $addresses];
+}
+
+function dmarc_ruf_report($dmarc, $ip, $mfrom, $rcptto, $ts, $mail, $options = [])
+{
+	$report = MIME();
+	$report->setType("message/feedback-report");
+	$headers = MailMessage::String("");
+
+	// Additional for DMARC
+	$headers->addHeader("Identity-Alignment", array_join([...($dmarc["spf_align"] == "pass" ? ["spf"] : []), ...($dmarc["dkim_align"] == "pass" ? ["dkim"] : [])], ",") ?: "none");
+	// SPF-DNS (missing from report)
+	if ($dmarc["dkim"][0]["tags"]["d"] and $dmarc["dkim"][0]["tags"]["s"])
+	{
+		$headers->addHeader("DKIM-Selector", $dmarc["dkim"][0]["tags"]["s"]);
+		if ($dmarc["dkim"][0]["tags"]["i"])
+			$headers->addHeader("DKIM-Identity", $dmarc["dkim"][0]["tags"]["i"]);
+		$headers->addHeader("DKIM-Domain", $dmarc["dkim"][0]["tags"]["d"]);
+	}
+	$headers->addHeader("Delivery-Result", $options["delivery-result"] ?? "reject");
+
+	// Optional
+	$headers->addHeader("Reported-Domain", $dmarc["pdomain"]);
+	$headers->addHeader("Authentication-Results", AuthenticationResults()->DMARC($dmarc)->toString(["multiline" => false]));
+	$headers->addHeader("Source-IP", $ip);
+	$headers->addHeader("Arrival-Date", strftime("%a, %d %b %Y %X %z", $ts));
+	$headers->addHeader("Original-Rcpt-To", "<".envelope_localpart_escape($rcptto["localpart"])."@".$rcptto["domain"].">");
+	if (!$mfrom["localpart"])
+		$headers->addHeader("Original-Mail-From", "<>");
+	else
+		$headers->addHeader("Original-Mail-From", "<".envelope_localpart_escape($mfrom["localpart"])."@".$mfrom["domain"].">");
+
+	// Required
+	$headers->addHeader("Version", "1");
+	$headers->addHeader("User-Agent", "Halon DMARC");
+	$headers->addHeader("Feedback-Type", "auth-failure");
+
+	$report->setBody(str_strip($headers->toString()));
+	return $report;
 }
 
 function organizationalDomain($domain)

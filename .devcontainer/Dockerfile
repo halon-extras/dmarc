@@ -14,7 +14,7 @@ RUN apt-get install -y apt-transport-https
 RUN wget -qO - https://raw.githubusercontent.com/halon/changelog/master/pgp-keys/7F0A73B5.asc | apt-key add -
 RUN echo "deb https://repo.halon.io/ jammy stable" >> /etc/apt/sources.list.d/halon.list
 RUN echo "machine repo.halon.io login ${HALON_REPO_USER} password ${HALON_REPO_PASS}" >> /etc/apt/auth.conf
-RUN apt-get -y update && apt-get -y install halon=6.1.0 halon-extras-authentication-results=1.1.0
+RUN apt-get -y update && apt-get -y install halon=6.1.0 halon-extras-authentication-results=1.1.1
 
 RUN /usr/bin/install -d /var/run/halon
 ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH
