@@ -208,6 +208,7 @@ function checkIdentifierAligment($domain1, $domain2, $strict)
 
 function getValidDMARCRecord($records)
 {
+	$matches = [];
 	foreach ($records as $r)
 	{
 		$x = header_dkim_decode($r);
@@ -225,7 +226,9 @@ function getValidDMARCRecord($records)
 			}
 		}
 		if (isset($r["v"]) and $r["v"] == "DMARC1")
-			return $r;
+			$matches[] = $r;
 	}
-	return none;
+	if (length($matches) != 1)
+		return none;
+	return $matches[0];
 }
