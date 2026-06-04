@@ -1,5 +1,10 @@
 function dmarc($mail, $ipaddr, $helo, $mfrom)
 {
+	dmarc_implementation($mail, $ipaddr, $helo, $mfrom, spf_query, dns_query, none);
+}
+
+function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_query, $dkim_dns_query)
+{
 	$result = [];
 	$headers = $mail->getHeaders("from", ["decode" => false]);
 	if (length($headers) == 0)
@@ -55,7 +60,7 @@ function dmarc($mail, $ipaddr, $helo, $mfrom)
 	$result["pdomain"] = $senderdomain;
 	$info = [];
 
-	$lookup = dns_query("_dmarc." . $senderdomain, ["type" => "txt"]);
+	$lookup = $dns_query("_dmarc." . $senderdomain, ["type" => "txt"]);
 	$domainOrg = none;
 
 	if (!$lookup["result"] or !($tagList = getValidDMARCRecord($lookup["result"])))
@@ -75,7 +80,7 @@ function dmarc($mail, $ipaddr, $helo, $mfrom)
 		}
 		$result["pdomain"] = $domainOrg;
 
-		$lookup = dns_query("_dmarc." . $domainOrg, ["type" => "txt"]);
+		$lookup = $dns_query("_dmarc." . $domainOrg, ["type" => "txt"]);
 		if (!$lookup["result"])
 		{
 			if ($lookup["error"] == "SERVFAIL" or $lookup["error"] == "TRY_AGAIN")
@@ -118,7 +123,7 @@ function dmarc($mail, $ipaddr, $helo, $mfrom)
 
 	if (checkIdentifierAligment($mfrom ? $mfrom : $helo, $senderdomain, $strictSPF)) {
 		$checkSPF = true;
-		$spf = spf_query($ipaddr, $helo, $mfrom);
+		$spf = $spf_query($ipaddr, $helo, $mfrom);
 		if ($spf["result"] == "pass")
 			$passSPF = true;
 		if ($spf["result"] == "temperror")
@@ -138,7 +143,7 @@ function dmarc($mail, $ipaddr, $helo, $mfrom)
 			continue;
 
 		$checkDKIM = true;
-		$r = $mail->verifyDKIM($mail->getHeader("DKIM-Signature", ["index" => $x, "field" => true]));
+		$r = $mail->verifyDKIM($mail->getHeader("DKIM-Signature", ["index" => $x, "field" => true]), $dkim_dns_query ? ["dns_function" => $dkim_dns_query] : []);
 
 		$result["dkim"][] = $r;
 		if ($r["result"] == "pass")

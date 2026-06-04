@@ -1,0 +1,46 @@
+import { dmarc_implementation } from "file://dmarc.hsl";
+
+$dns = "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBg".
+"QCpRIzmELwgc6MIvckFjwL8QT6lMdJKAH1IAU1cOstYRHrQdsRshnpZCMg778P".
+"rPnPdmrm5XCd48YTnniuHUvXIkHPO+vUDlv3u+N1gtUOD1oHKCrqiKTcNgB2J/".
+"4+FY7GridqjFlg06QqVoX7a3WY8pmvILxagJynZSE729QF0jQIDAQAB";
+
+$privkey = rsa_privatekey(''-----BEGIN PRIVATE KEY-----
+MIICdgIBADANBgkqhkiG9w0BAQEFAASCAmAwggJcAgEAAoGBAKlEjOYQvCBzowi9
+yQWPAvxBPqUx0koAfUgBTVw6y1hEetB2xGyGelkIyDvvw+s+c92aublcJ3jxhOee
+K4dS9ciQc8769QOW/e743WC1Q4PWgcoKuqIpNw2AHYn/j4VjsauJ2qMWWDTpCpWh
+ftrdZjyma8gvFqAnKdlITvb1AXSNAgMBAAECgYB8rbqfB/qaaLLREIIObx3C0wgi
+xATib2PYcuUZp1D6rk5MWP8r9Q4PoNFknKISGAleVMayivekNToxJSdo4SmaI3p/
+tY0ceKlsoJEEXBA/lZVrNKM69PvDmtXaSLuAX4KfrsF5jHd+UaeINgtGzE0Ngqre
+wdlTA9FyYFypCiqUHQJBAOEbuOjtNYWFhhUuh0BJammBbskoZ3BwVu3KiNLXIwM6
+E9hoH6DJ5jcSUVnkg13eizkhJ3qpWjaWJ+xNvjYjZgMCQQDAfxhoq1rKArsWriDs
+C7v2rVCyfUSh3NnNe+bqY6piGxlSZdJH0jR9zv+GvWg+FZtguJIjcsScTUFLNZ1n
+7z4vAkB3kr46HCad8jsy7TAy2cyIlpQ+jhPECihiz362YEjc4fDAty51vklnX3eP
+BG8zYY8anZ3W7jZZYJF8WB99qnf5AkA13BnXR4KqnSL90JDTmuDnv0yh9FzcsS+b
+x/wvPt2wf4aRQH4arF0VinKCn8JoBKGp6VqyYm1SkmcfhQvaxdzvAkEAwbehbmPp
+MS7xJGSlXBpH63T7wHgp83+onStq9pQ4CmGFyghlKuE3zZkUydD345GisADGOVdI
+kd6Y4gbCYti9PQ==
+-----END PRIVATE KEY-----'');
+
+echo "--- test _dmarc nxdomain";
+
+$mail = MIME();
+$mail->addHeader("From", "erik@example.com");
+$mail->setBody("Hello");
+$mail->signDKIM("spaceship", "example.com", $privkey);
+
+$res = dmarc_implementation(MailMessage::String($mail->toString()), "127.0.0.1", "", "example.com", function($ip, $helo, $sender) {
+    throw "spf_query($ip, $helo, $sender)";
+}, function($host, $options = []) {
+    if ($host == "_dmarc.example.com" and $options == ["type" => "txt"])
+        return ["error" => "NXDOMAIN"];
+    throw "dns_query($host)";
+}, function($host, $options = []) {
+    throw "dkim_dns_query($host)";
+});
+
+if ($res["result"] == "policy_absent" and
+    $res["pdomain"] == "example.com")
+    echo " OK";
+else
+    throw $res;
