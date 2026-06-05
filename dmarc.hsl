@@ -63,7 +63,28 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 	$lookup = $dns_query("_dmarc." . $senderdomain, ["type" => "txt"]);
 	$domainOrg = none;
 
-	if (!$lookup["result"] or !($tagList = getValidDMARCRecord($lookup["result"])))
+	$tagList = none;
+	$lookupOrganizationalDomain = false;
+	if (!$lookup["result"])
+		$lookupOrganizationalDomain = true;
+	else
+	{
+		$record = getValidDMARCRecord($lookup["result"]);
+		switch ($record)
+		{
+			case none:
+				$lookupOrganizationalDomain = true;
+			break;
+			case false:
+				/* do nothing */
+			break;
+			default:
+				$tagList = $record;
+			break;
+		}
+	}
+
+	if ($lookupOrganizationalDomain)
 	{
 		$domainOrg = organizationalDomain($senderdomain);
 		if (!$domainOrg)
@@ -233,7 +254,9 @@ function getValidDMARCRecord($records)
 		if (isset($r["v"]) and $r["v"] == "DMARC1")
 			$matches[] = $r;
 	}
-	if (length($matches) != 1)
-		return none;
+	if (length($matches) >= 2)
+		return false; /* stop */
+	if (length($matches) == 0)
+		return none; /* no dkim signatures */
 	return $matches[0];
 }
