@@ -1,6 +1,6 @@
 function dmarc($mail, $ipaddr, $helo, $mfrom)
 {
-	dmarc_implementation($mail, $ipaddr, $helo, $mfrom, spf_query, dns_query, none);
+	return dmarc_implementation($mail, $ipaddr, $helo, $mfrom, spf_query, dns_query, none);
 }
 
 function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_query, $dkim_dns_query)
