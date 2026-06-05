@@ -155,7 +155,7 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 			$temperrorDKIM = true;
 	}
 
-	$selected = ($pct == 100 or rand(0, 100) < $pct);
+	$selected = ($pct == 100 or random_number(0, 99) < $pct);
 	$result["pct-selected"] = $selected;
 
 	$action = "pass";
