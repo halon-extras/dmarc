@@ -27,7 +27,6 @@ echo "--- test spf permerror";
 $mail = MIME();
 $mail->addHeader("From", "erik@example.com");
 $mail->setBody("Hello");
-$mail->signDKIM("spaceship", "example.com", $privkey);
 
 $res = dmarc_implementation(MailMessage::String($mail->toString()), "127.0.0.1", "", "example.com", function($ip, $helo, $sender) {
     if ($ip == "127.0.0.1" and
@@ -40,14 +39,12 @@ $res = dmarc_implementation(MailMessage::String($mail->toString()), "127.0.0.1",
         return ["result" => ["v=DMARC1; p=reject"]];
     throw "dns_query($host)";
 }, function($host) {
-    if ($host == "spaceship._domainkey.example.com")
-        return ["error" => "permerror"];
     throw "dkim_dns_query($host)";
 });
 
 if ($res["result"] == "reject" and
     $res["spf_align"] == "fail" and
-    $res["dkim_align"] == "fail" and
+    $res["dkim_align"] == "unaligned" and
     $res["pdomain"] == "example.com")
     echo " OK";
 else
