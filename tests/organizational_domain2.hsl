@@ -22,7 +22,7 @@ MS7xJGSlXBpH63T7wHgp83+onStq9pQ4CmGFyghlKuE3zZkUydD345GisADGOVdI
 kd6Y4gbCYti9PQ==
 -----END PRIVATE KEY-----'');
 
-echo "--- test organizational domain (dkim)";
+echo "test organizational domain (dkim)";
 
 $mail = MIME();
 $mail->addHeader("From", "erik@example.com");
