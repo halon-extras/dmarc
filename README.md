@@ -21,7 +21,7 @@ yum install halon-extras-dmarc
 
 These functions needs to be [imported](https://docs.halon.io/hsl/structures.html#import) from the `extras://dmarc` module path.
 
-### dmarc(fp[, senderip, senderhelo, senderdomain])
+### dmarc(fp[, senderip, senderhelo, senderdomain, options])
 
 **Params**
 
@@ -29,6 +29,11 @@ These functions needs to be [imported](https://docs.halon.io/hsl/structures.html
 - senderip `string` - the sender's IP
 - senderhelo `string` - the sender's HELO
 - senderdomain `string` - the sender's domain
+- options `array` - the options
+
+***Options***
+
+- dkimheaders `number` - the number of dkim headers to check, the default is 8
 
 **Example (EOD)**
 

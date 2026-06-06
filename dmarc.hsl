@@ -1,10 +1,12 @@
-function dmarc($mail, $ipaddr, $helo, $mfrom)
+function dmarc($mail, $ipaddr, $helo, $mfrom, $options = [])
 {
-	return dmarc_implementation($mail, $ipaddr, $helo, $mfrom, spf_query, dns_query, none);
+	return dmarc_implementation($mail, $ipaddr, $helo, $mfrom, spf_query, dns_query, none, $options);
 }
 
-function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_query, $dkim_dns_query)
+function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_query, $dkim_dns_query, $options = [])
 {
+	$dkimheaders = $options["dkimheaders"] ?? 8;
+
 	$result = [];
 	$headers = $mail->getHeaders("from", ["decode" => false]);
 	if (length($headers) == 0)
@@ -175,7 +177,7 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 		}
 		if ($r["result"] == "temperror")
 			$temperrorDKIM = true;
-		if (++$checks >= 8)
+		if (++$checks >= $dkimheaders)
 			break;
 	}
 
