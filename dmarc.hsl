@@ -242,7 +242,7 @@ function getValidDMARCRecord($records)
 	$matches = [];
 	foreach ($records as $r)
 	{
-		$x = header_dkim_decode($r);
+		$x = header_dkim_decode($r); /* verifies v= is the first tag */
 		$r = [];
 		if (is_array($x))
 		{
