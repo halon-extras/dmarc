@@ -7,16 +7,17 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 {
 	$dkimheaders = $options["dkimheaders"] ?? 8;
 
-	$result = [];
 	$headers = $mail->getHeaders("from", ["decode" => false]);
 	if (length($headers) == 0)
 	{
+		$result = [];
 		$result["result"] = "permerror";
 		$result["reason"] = "No [MAIL].From header";
 		return $result;
 	}
 	if (length($headers) > 1)
 	{
+		$result = [];
 		$result["result"] = "permerror";
 		$result["reason"] = "Too many [MAIL].From headers";
 		return $result;
@@ -25,18 +26,21 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 	$fromAddresses = header_addresslist_extract($headers[0]);
 	if ($fromAddresses === none)
 	{
+		$result = [];
 		$result["result"] = "permerror";
 		$result["reason"] = "Bad [MAIL].From address";
 		return $result;
 	}
 	if (length($fromAddresses) == 0)
 	{
+		$result = [];
 		$result["result"] = "permerror";
 		$result["reason"] = "No [MAIL].From address";
 		return $result;
 	}
 	if (length($fromAddresses) > 1)
 	{
+		$result = [];
 		$result["result"] = "permerror";
 		$result["reason"] = "Too many [MAIL].From addresses";
 		return $result;
@@ -44,6 +48,7 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 	$split = str_split($fromAddresses[0], "@", -2);
 	if (length($split) != 2 or $split[1] == "")
 	{
+		$result = [];
 		$result["result"] = "permerror";
 		$result["reason"] = "Bad [MAIL].From address: no domain";
 		return $result;
@@ -51,6 +56,7 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 	$senderdomain = idna_encode(str_lower($split[1]));
 	if (!$senderdomain)
 	{
+		$result = [];
 		$result["result"] = "permerror";
 		$result["reason"] = "Bad [MAIL].From domain";
 		return $result;
@@ -58,6 +64,7 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 	$helo = str_lower($helo ?? "");
 	$mfrom = str_lower($mfrom ?? "");
 
+	$result = [];
 	$result["from"] = $senderdomain;
 	$result["pdomain"] = $senderdomain;
 
