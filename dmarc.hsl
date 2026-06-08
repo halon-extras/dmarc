@@ -193,14 +193,29 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 	if (!$passSPF and !$passDKIM) {
 		if ($temperrorSPF or $temperrorDKIM)
 			$action = "temperror";
-		else if ($tagp == "reject")
-			$action = $selected ? "reject" : "quarantine";
-		else if ($tagp == "quarantine")
-			$action = $selected ? "quarantine" : "none";
-		else if ($tagp == "none")
-			$action = "none";
 		else
-			$action = "none";
+		{
+			if ($domainOrg and isset($tagList["np"]))
+			{
+				$existLookup = $dns_query($senderdomain, ["type" => "soa"]);
+				if ($existLookup["error"] == "NXDOMAIN")
+					$tagp = $tagList["np"];
+				else if ($existLookup["error"])
+				{
+					$result["result"] = "temperror";
+					$result["reason"] = "DNS error while checking author domain: ".$existLookup["error"];
+					return $result;
+				}
+			}
+			if ($tagp == "reject")
+				$action = $selected ? "reject" : "quarantine";
+			else if ($tagp == "quarantine")
+				$action = $selected ? "quarantine" : "none";
+			else if ($tagp == "none")
+				$action = "none";
+			else
+				$action = "none";
+		}
 	}
 
 	$result["result"] = $action;
@@ -254,7 +269,7 @@ function getValidDMARCRecord($records)
 				$k = str_lower($k);
 				$r[$k] = match ($k) {
 					"v" => $v, /* case sensitive */
-					"adkim", "aspf", "fo", "p", "rf", "sp", "t" => str_lower($v),
+					"adkim", "aspf", "fo", "p", "rf", "sp", "np", "t" => str_lower($v),
 					default => $v /* other fields, leave as is for now... */
 				};
 			}
