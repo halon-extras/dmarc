@@ -61,8 +61,6 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 		$result["reason"] = "Bad [MAIL].From domain";
 		return $result;
 	}
-	$helo = str_lower($helo ?? "");
-	$mfrom = str_lower($mfrom ?? "");
 
 	$result = [];
 	$result["from"] = $senderdomain;
@@ -150,7 +148,10 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 	$checkSPF = false; $checkDKIM = false;
 	$temperrorSPF = false; $temperrorDKIM = false;
 
-	if (checkIdentifierAligment($mfrom ? $mfrom : $helo, $senderdomain, $strictSPF)) {
+	$helo = str_lower($helo ?? "");
+	$mfrom = str_lower($mfrom ?? "");
+	if (checkIdentifierAligment($mfrom ? $mfrom : $helo, $senderdomain, $strictSPF))
+	{
 		$checkSPF = true;
 		$spf = $spf_query($ipaddr, $helo, $mfrom);
 		if ($spf["result"] == "pass")
