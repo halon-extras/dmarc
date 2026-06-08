@@ -63,7 +63,12 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 	$info = [];
 
 	$lookup = $dns_query("_dmarc." . $senderdomain, ["type" => "txt"]);
-	$domainOrg = none;
+	if ($lookup["error"] == "SERVFAIL" or $lookup["error"] == "TRY_AGAIN")
+	{
+		$result["result"] = "temperror";
+		$result["reason"] = "DMARC TXT record resolving: ". $lookup["error"];
+		return $result;
+	}
 
 	$tagList = none;
 	$lookupOrganizationalDomain = false;
@@ -86,17 +91,12 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 		}
 	}
 
+	$domainOrg = none;
 	if ($lookupOrganizationalDomain)
 	{
 		$domainOrg = organizationalDomain($senderdomain);
 		if (!$domainOrg)
 		{
-			if ($lookup["error"] == "SERVFAIL" or $lookup["error"] == "TRY_AGAIN")
-			{
-				$result["result"] = "temperror";
-				$result["reason"] = "DMARC TXT record resolving: ". $lookup["error"];
-				return $result;
-			}
 			$result["result"] = "policy_absent";
 			$result["reason"] = "No valid DMARC record";
 			return $result;
