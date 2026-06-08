@@ -262,6 +262,6 @@ function getValidDMARCRecord($records)
 	if (length($matches) >= 2)
 		return false; /* stop */
 	if (length($matches) == 0)
-		return none; /* no dkim signatures */
+		return none; /* no dmarc records */
 	return $matches[0];
 }
