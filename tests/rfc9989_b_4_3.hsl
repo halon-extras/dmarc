@@ -22,44 +22,45 @@ MS7xJGSlXBpH63T7wHgp83+onStq9pQ4CmGFyghlKuE3zZkUydD345GisADGOVdI
 kd6Y4gbCYti9PQ==
 -----END PRIVATE KEY-----'');
 
-echo "test many dkims (7 + unaligned)";
+echo "rfc7489_b_4_3";
 
 $mail = MIME();
-$mail->addHeader("From", "erik@example.com");
+$mail->addHeader("From", "erik@giant.bank.example");
 $mail->setBody("Hello");
-$mail->signDKIM("spaceship", "example.com", $privkey);
-$mail->signDKIM("spaceship1", "example.com", $privkey);
-$mail->signDKIM("spaceship2", "example.com", $privkey);
-$mail->signDKIM("spaceship3", "example.com", $privkey);
-$mail->signDKIM("spaceship4", "example.com", $privkey);
-$mail->signDKIM("spaceship5", "example.com", $privkey);
-$mail->signDKIM("spaceship6", "example.com", $privkey);
-$mail->signDKIM("spaceship7", "example.com", $privkey);
+$mail->signDKIM("spaceship", "mail.mega.bank.example", $privkey);
 
-$res = dmarc_implementation(MailMessage::String($mail->toString()), "127.0.0.1", "", "example.com", function($ip, $helo, $sender) {
+$res = dmarc_implementation(MailMessage::String($mail->toString()), "127.0.0.1", "", "mail.giant.bank.example", function($ip, $helo, $sender) {
     if ($ip == "127.0.0.1" and
         $helo == "" and
-        $sender == "example.com")
+        $sender == "mail.giant.bank.example")
         return ["result" => "pass", "reason" => "localhost"];
     throw "spf_query($ip, $helo, $sender)";
 }, function($host, $options = []) {
-    if ($host == "_dmarc.example.com" and $options == ["type" => "txt"])
-        return ["result" => ["v=DMARC1; p=reject"]];
+    if ($host == "_dmarc.giant.bank.example" and $options == ["type" => "txt"])
+        return ["result" => ["v=DMARC1; p=quarantine;"]];
+    if ($host == "_dmarc.bank.example" and $options == ["type" => "txt"])
+        return ["result" => ["v=DMARC1; p=reject; psd=y;"]];
+    if ($host == "_dmarc.example" and $options == ["type" => "txt"])
+        return ["error" => "NXDOMAIN"];
+    if ($host == "_dmarc.mega.bank.example" and $options == ["type" => "txt"])
+        return ["error" => "NXDOMAIN"];
+    if ($host == "_dmarc.mail.mega.bank.example" and $options == ["type" => "txt"])
+        return ["error" => "NXDOMAIN"];
+    if ($host == "_dmarc.mail.giant.bank.example" and $options == ["type" => "txt"])
+        return ["error" => "NXDOMAIN"];
     throw "dns_query($host)";
 }, function($host) {
     global $dns;
-    if ($host == "spaceship._domainkey.example.com")
+    if ($host == "spaceship._domainkey.mail.mega.bank.example")
         return ["result" => $dns];
-    if ($host =~ #/^spaceship[1-7]\._domainkey\.example\.com/)
-        return ["error" => "permfail"];
     throw "dkim_dns_query($host)";
-});
+}, ["rfc9989" => true]);
 
 if ($res["spf_align"] == "pass" and
-    $res["dkim_align"] == "pass" and
+    $res["dkim_align"] == "unaligned" and
     $res["result"] == "pass" and
-    $res["pdomain"] == "example.com" and
-    $res["policy"] == "reject")
+    $res["pdomain"] == "giant.bank.example" and
+    $res["policy"] == "quarantine")
     echo " OK";
 else
     throw $res;

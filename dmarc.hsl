@@ -5,7 +5,8 @@ function dmarc($mail, $ipaddr, $helo, $mfrom, $options = [])
 
 function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_query, $dkim_dns_query, $options = [])
 {
-	$dkimheaders = $options["dkimheaders"] ?? 8;
+	$maxdkimheaders = $options["maxdkimheaders"] ?? 8;
+	$rfc9989 = $options["rfc9989"] ?? false;
 
 	$headers = $mail->getHeaders("from", ["decode" => false]);
 	if (length($headers) == 0)
@@ -64,93 +65,88 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 
 	$result = [];
 	$result["from"] = $senderdomain;
-	$result["pdomain"] = $senderdomain;
 
-	$lookup = $dns_query("_dmarc." . $senderdomain, ["type" => "txt"]);
-	if ($lookup["error"] == "SERVFAIL" or $lookup["error"] == "TRY_AGAIN")
-	{
-		$result["result"] = "temperror";
-		$result["reason"] = "DMARC TXT record resolving: ". $lookup["error"];
-		return $result;
-	}
+	$lookup = $rfc9989 ? dnsWalk($senderdomain, $dns_query) : pslLookup($senderdomain, $dns_query);
+	if ($lookup["result"])
+		return $result + $lookup;
 
-	$tagList = none;
-	$lookupOrganizationalDomain = false;
-	if (!$lookup["result"])
-		$lookupOrganizationalDomain = true;
-	else
-	{
-		$record = getValidDMARCRecord($lookup["result"]);
-		switch ($record)
-		{
-			case none:
-				$lookupOrganizationalDomain = true;
-			break;
-			case false:
-				// do nothing
-			break;
-			default:
-				$tagList = $record;
-			break;
-		}
-	}
+	$result["dmarc"] = $lookup["policy"];
+	$result["pdomain"] = $lookup["pdomain"];
 
-	$domainOrg = none;
-	if ($lookupOrganizationalDomain)
-	{
-		$domainOrg = organizationalDomain($senderdomain);
-		if (!$domainOrg)
-		{
-			$result["result"] = "policy_absent";
-			$result["reason"] = "No valid DMARC record";
-			return $result;
-		}
-		$result["pdomain"] = $domainOrg;
-
-		$lookup = $dns_query("_dmarc." . $domainOrg, ["type" => "txt"]);
-		if (!$lookup["result"])
-		{
-			if ($lookup["error"] == "SERVFAIL" or $lookup["error"] == "TRY_AGAIN")
-			{
-				$result["result"] = "temperror";
-				$result["reason"] = "DMARC TXT record resolving: ". $lookup["error"];
-				return $result;
-			}
-			$result["result"] = "policy_absent";
-			$result["reason"] = "No valid DMARC record";
-			return $result;
-		}
-
-		if (!($tagList = getValidDMARCRecord($lookup["result"])))
-		{
-			$result["result"] = "policy_absent";
-			$result["reason"] = "No valid DMARC record";
-			return $result;
-		}
-		$result["dmarc"] = $tagList;
-	}
-	else
-		$result["dmarc"] = $tagList;
-
+	$domainOrg = $senderdomain != $lookup["pdomain"];
+	$tagList = $lookup["policy"];
 	$tagp = $domainOrg ? $tagList["sp"] ?? $tagList["p"] : $tagList["p"];
-	if (!$tagp)
+	$tagnp = $tagList["np"];
+	if (!$tagp or !in_array($tagp, ["none", "quarantine", "reject"]))
 	{
-		$result["result"] = "policy_absent";
-		$result["reason"] = "p= is missing";
-		return $result;
+		if (!$tagList["rua"])
+		{
+			$result["result"] = "policy_absent";
+			$result["reason"] = "p= is missing or invalid";
+			return $result;
+		}
+		$tagp = "none";
+	}
+	if ($rfc9989 and $tagnp and !in_array($tagnp, ["none", "quarantine", "reject"]))
+	{
+		if (!$tagList["rua"])
+		{
+			$result["result"] = "policy_absent";
+			$result["reason"] = "np= is missing or invalid";
+			return $result;
+		}
+		$tagnp = "none";
 	}
 
 	$strictSPF = $tagList["aspf"] == "s";
 	$strictDKIM = $tagList["adkim"] == "s";
-	$pct = $tagList["pct"] ? number($tagList["pct"]) : 100;
+	$pct = (!$rfc9989 and $tagList["pct"]) ? number($tagList["pct"]) : 100;
 
 	$passSPF = false; $passDKIM = false;
-	$checkSPF = false; $checkDKIM = false;
+	$checkSPF = false; $checkDKIM = false; $dkimAligned = false;
 	$temperrorSPF = false; $temperrorDKIM = false;
+
+	$alignmentCache = [];
+	$alignmentCache[$senderdomain] = $lookup["orgdomain"];
+	$checkIdentifierAlignment = function ($domain1, $domain2, $strict) closure ($alignmentCache, $rfc9989, $dns_query)
+	{
+		if ($strict)
+			return $domain1 == $domain2;
+
+		if ($alignmentCache[$domain1])
+			$domainOrg1 = $alignmentCache[$domain1];
+		else {
+			if ($rfc9989)
+			{
+				$lookup = dnsWalk($domain1, $dns_query);
+				if ($lookup["result"] == "policy_absent")
+					return false;
+				if ($lookup["result"] == "temperror")
+					return none;
+				$domainOrg1 = $lookup["orgdomain"];
+			}
+			else
+			{
+				$domainOrg1 = organizationalDomain($domain1);
+				$domainOrg1 = $domainOrg1 ?? $domain1;
+			}
+			$alignmentCache[$domain1] = $domainOrg1;
+		}
+
+		return $domainOrg1 == $alignmentCache[$domain2];
+	};
 
 	$helo = str_lower($helo ?? "");
 	$mfrom = str_lower($mfrom ?? "");
-	if (checkIdentifierAligment($mfrom ? $mfrom : $helo, $senderdomain, $strictSPF))
+
+	$alignment = $checkIdentifierAlignment($mfrom ? $mfrom : $helo, $senderdomain, $strictSPF);
+	if ($alignment == none)
+	{
+		$result["result"] = "temperror";
+		$result["reason"] = "Failed to check alignment of ".($mfrom ? $mfrom : $helo);
+		return $result;
+	}
+	if ($alignment)
 	{
 		$checkSPF = true;
 		$spf = $spf_query($ipaddr, $helo, $mfrom);
@@ -161,40 +157,65 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 		$result["spf"] = $spf;
 	}
 
-	$checks = 0;
 	foreach ($mail->getHeaders("DKIM-Signature") as $x => $header)
 	{
+		if (!$maxdkimheaders--)
+			break;
 		$dkim = header_dkim_decode($header);
 		if (!$dkim or !$dkim["d"])
 			continue;
 		$dkimdomain = idna_encode(str_lower($dkim["d"]));
 		if (!$dkimdomain)
 			continue;
-		if (!checkIdentifierAligment($dkimdomain, $senderdomain, $strictDKIM))
-			continue;
+
+		if (($rfc9989 and $strictDKIM) or !$rfc9989)
+		{
+			$alignment = $checkIdentifierAlignment($dkimdomain, $senderdomain, $strictDKIM);
+			if ($alignment == none)
+			{
+				$result["result"] = "temperror";
+				$result["reason"] = "Failed to check alignment of ".($dkimdomain);
+				return $result;
+			}
+			if (!$alignment)
+				continue;
+			$dkimAligned = true;
+		}
 
 		$checkDKIM = true;
 		$r = $mail->verifyDKIM($mail->getHeader("DKIM-Signature", ["index" => $x, "field" => true]), $dkim_dns_query ? ["dns_function" => $dkim_dns_query] : []);
-
 		$result["dkim"][] = $r;
-		if ($r["result"] == "pass")
-		{
-			$passDKIM = true;
-			break;
-		}
+
 		if ($r["result"] == "temperror")
 			$temperrorDKIM = true;
-		if (++$checks >= $dkimheaders)
-			break;
+
+		if ($r["result"] != "pass")
+			continue;
+
+		if ($rfc9989 and !$strictDKIM)
+		{
+			$alignment = $checkIdentifierAlignment($dkimdomain, $senderdomain, $strictDKIM);
+			if ($alignment == none)
+			{
+				$temperrorDKIM = true;
+				continue;
+			}
+			if (!$alignment)
+				continue;
+			$dkimAligned = true;
+		}
+
+		$passDKIM = true;
+		break;
 	}
 
 	$selected = ($pct == 100 or random_number(0, 99) < $pct);
-	if (isset($tagList["t"]))
+	if ($rfc9989 and isset($tagList["t"]))
 		$selected = $tagList["t"] == "y" ? false : true;
 
 	$result["pct-selected"] = $selected;
 	$result["spf_align"] = $checkSPF ? ($passSPF ? "pass": "fail") : "unaligned";
-	$result["dkim_align"] = $checkDKIM ? ($passDKIM ? "pass": "fail") : "unaligned";
+	$result["dkim_align"] = ($checkDKIM and $dkimAligned) ? ($passDKIM ? "pass": "fail") : "unaligned";
 
 	$action = "pass";
 	if (!$passSPF and !$passDKIM) {
@@ -202,11 +223,13 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 			$action = "temperror";
 		else
 		{
-			if ($domainOrg and isset($tagList["np"]))
+			if ($rfc9989 and $domainOrg and $tagnp)
 			{
 				$existLookup = $dns_query($senderdomain, ["type" => "soa"]);
 				if ($existLookup["error"] == "NXDOMAIN")
-					$tagp = $tagList["np"];
+				{
+					$tagp = $tagnp;
+				}
 				else if ($existLookup["error"])
 				{
 					$result["result"] = "temperror";
@@ -249,19 +272,6 @@ function organizationalDomain($domain)
 	return $domainOrg;
 }
 
-function checkIdentifierAligment($domain1, $domain2, $strict)
-{
-	if ($strict)
-		return $domain1 == $domain2;
-
-	$domainOrg1 = organizationalDomain($domain1);
-	$domainOrg1 = $domainOrg1 ?? $domain1;
-	$domainOrg2 = organizationalDomain($domain2);
-	$domainOrg2 = $domainOrg2 ?? $domain2;
-
-	return $domainOrg1 == $domainOrg2;
-}
-
 function getValidDMARCRecord($records)
 {
 	$matches = [];
@@ -289,4 +299,192 @@ function getValidDMARCRecord($records)
 	if (length($matches) == 0)
 		return none; // no dmarc records
 	return $matches[0];
+}
+
+function pslLookup($authordomain, $dns_query)
+{
+	$result = [];
+	$result["pdomain"] = $authordomain;
+
+	$lookup = $dns_query("_dmarc." . $authordomain, ["type" => "txt"]);
+	if ($lookup["error"] == "SERVFAIL" or $lookup["error"] == "TRY_AGAIN")
+	{
+		$result["result"] = "temperror";
+		$result["reason"] = "DMARC TXT record resolving: ". $lookup["error"];
+		return $result;
+	}
+
+	if ($lookup["result"])
+	{
+		$record = getValidDMARCRecord($lookup["result"]);
+		switch ($record)
+		{
+			case none:
+				// fall down
+			break;
+			case false:
+				$result["result"] = "policy_absent";
+				$result["reason"] = "No valid DMARC record";
+				return $result;
+			break;
+			default:
+				$result["policy"] = $record;
+				$result["orgdomain"] = organizationalDomain($authordomain) ?: $authordomain;
+				return $result;
+			break;
+		}
+	}
+
+	$domainOrg = organizationalDomain($authordomain);
+	if (!$domainOrg)
+	{
+		$result["result"] = "policy_absent";
+		$result["reason"] = "No valid DMARC record";
+		return $result;
+	}
+
+	$result["pdomain"] = $domainOrg;
+
+	$lookup = $dns_query("_dmarc." . $domainOrg, ["type" => "txt"]);
+	if ($lookup["error"] == "SERVFAIL" or $lookup["error"] == "TRY_AGAIN")
+	{
+		$result["result"] = "temperror";
+		$result["reason"] = "DMARC TXT record resolving: ". $lookup["error"];
+		return $result;
+	}
+
+	if ($lookup["result"])
+	{
+		$record = getValidDMARCRecord($lookup["result"]);
+		switch ($record)
+		{
+			case none:
+				$result["result"] = "policy_absent";
+				$result["reason"] = "No valid DMARC record";
+				return $result;
+			break;
+			case false:
+				$result["result"] = "policy_absent";
+				$result["reason"] = "No valid DMARC record";
+				return $result;
+			break;
+			default:
+				$result["policy"] = $record;
+				$result["orgdomain"] = $domainOrg;
+				return $result;
+			break;
+		}
+
+	}
+
+	$result["result"] = "policy_absent";
+	$result["reason"] = "No valid DMARC record";
+	return $result;
+}
+
+function dnsTreeWalkDomains($domain)
+{
+	$parts = str_split($domain, ".");
+	if (count($parts) == 1)
+		return [$domain];
+
+	$labels = $parts[-(count($parts) <= 7 ? count($parts) - 1 : 7):];
+
+	$domains = [$domain];
+	for ($i = length($labels); $i != 0; --$i)
+		$domains[] = array_join($labels[-$i:], ".");
+	return $domains;
+}
+
+function dnsWalk($authordomain, $dns_query)
+{
+	$domains = dnsTreeWalkDomains($authordomain);
+	$policies = [];
+
+	$result = [];
+	foreach ($domains as $i => $domain)
+	{
+		$lookup = $dns_query("_dmarc." . $domain, ["type" => "txt"]);
+		if ($lookup["error"] == "SERVFAIL" or $lookup["error"] == "TRY_AGAIN")
+		{
+			$result["result"] = "temperror";
+			$result["reason"] = "DMARC TXT record resolving: ". $lookup["error"];
+			return $result;
+		}
+		if (!$lookup["result"])
+			continue;
+		else
+		{
+			$record = getValidDMARCRecord($lookup["result"]);
+			switch ($record)
+			{
+				case none:
+					continue;
+				break;
+				case false:
+					continue;
+				break;
+				default:
+					if ($authordomain == $domain)
+					{
+						$result["policy"] = $record;
+						$result["pdomain"] = $domain;
+						$result["orgdomain"] = $domain;
+						if ($record["psd"] == "n" or $record["psd"] == "y")
+							return $result;
+					}
+					else
+					{
+						$policies[$domain] = $record;
+						if ($record["psd"] == "n")
+						{
+							if (!$result["policy"])
+							{
+								$result["policy"] = $record;
+								$result["pdomain"] = $domain;
+							}
+							$result["orgdomain"] = $domain;
+							return $result;
+						}
+						if ($record["psd"] == "y")
+						{
+							if (!$result["policy"])
+							{
+								if (isset($policies[$domains[$i - 1]]))
+								{
+									$result["policy"] = $policies[$domains[$i - 1]];
+									$result["pdomain"] = $domains[$i - 1];
+								}
+								else
+								{
+									$result["policy"] = $record;
+									$result["pdomain"] = $domain;
+								}
+							}
+							$result["orgdomain"] = $domains[$i - 1];
+							return $result;
+						}
+					}
+				break;
+			}
+		}
+	}
+
+	if ($result["policy"] and $result["pdomain"] == $authordomain and length($policies) > 0)
+		$result["orgdomain"] = array_keys($policies)[-1:][0];
+
+	if (!$result["policy"] and length($policies) > 0)
+	{
+		$result["policy"] = $policies[-1:][0];
+		$result["pdomain"] = array_keys($policies)[-1:][0];
+		$result["orgdomain"] = $result["pdomain"];
+	}
+
+	if (!$result["policy"])
+	{
+		$result["result"] = "policy_absent";
+		$result["reason"] = "No valid DMARC record";
+	}
+
+	return $result;
 }

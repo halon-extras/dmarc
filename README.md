@@ -1,5 +1,6 @@
 # Domain-based Message Authentication, Reporting & Conformance (DMARC) 
-An DMARC implementation written in HSL
+
+An DMARC implementation written in HSL. Supports both rfc7489 (default) and rfc9989.
 
 ## Installation
 
@@ -33,7 +34,8 @@ These functions needs to be [imported](https://docs.halon.io/hsl/structures.html
 
 ***Options***
 
-- dkimheaders `number` - the number of dkim headers to check, the default is 8
+- maxdkimheaders `number` - the maximum number of dkim headers to check, the default is 8
+- rfc9989 `boolean` - check dmarc according to rfc9989 instead of rfc7489, the default is false
 
 **Example (EOD)**
 

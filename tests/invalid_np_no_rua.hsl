@@ -1,0 +1,27 @@
+import { dmarc_implementation } from "file://dmarc.hsl";
+
+echo "test invalid np= without rua (policy_absent)";
+
+$mail = MIME();
+$mail->addHeader("From", "erik@another.example.com");
+$mail->setBody("Hello");
+
+$res = dmarc_implementation(MailMessage::String($mail->toString()), "127.0.0.1", "", "example2.com", function($ip, $helo, $sender) {
+    throw "spf_query($ip, $helo, $sender)";
+}, function($host, $options = []) {
+    if ($host == "_dmarc.another.example.com" and $options == ["type" => "txt"])
+        return ["error" => "NXDOMAIN"];
+    if ($host == "_dmarc.example.com" and $options == ["type" => "txt"])
+        return ["result" => ["v=DMARC1; p=reject; np=bogus"]];
+    if ($host == "_dmarc.com" and $options == ["type" => "txt"])
+        return ["error" => "NXDOMAIN"];
+    throw "dns_query($host)";
+}, function($host) {
+    throw "dkim_dns_query($host)";
+}, ["rfc9989" => true]);
+
+if ($res["result"] == "policy_absent" and
+    $res["pdomain"] == "example.com")
+    echo " OK";
+else
+    throw $res;

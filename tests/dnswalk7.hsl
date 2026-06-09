@@ -1,0 +1,15 @@
+import { dnsWalk } from "file://dmarc.hsl";
+
+echo "test dnsWalk with organizational domain with error";
+
+$result = dnsWalk("a.b.example.com", function($host, $options = []) {
+    if ($host == "_dmarc.a.b.example.com" and $options == ["type" => "txt"])
+        return ["error" => "SERVFAIL"];
+    throw "dns_query($host)";
+});
+if ($result != [
+        "result" => "temperror",
+        "reason" => "DMARC TXT record resolving: SERVFAIL"])
+    throw $result;
+else
+    echo " OK";

@@ -1,0 +1,22 @@
+import { dnsWalk } from "file://dmarc.hsl";
+
+echo "test dnsWalk with multiple records at author domain (discard and walk up)";
+
+$result = dnsWalk("a.b.example.com", function($host, $options = []) {
+    if ($host == "_dmarc.a.b.example.com" and $options == ["type" => "txt"])
+        return ["result" => ["v=DMARC1; p=reject", "v=DMARC1; p=none"]];
+    if ($host == "_dmarc.b.example.com" and $options == ["type" => "txt"])
+        return ["error" => "NO_DATA"];
+    if ($host == "_dmarc.example.com" and $options == ["type" => "txt"])
+        return ["result" => ["v=DMARC1; p=none"]];
+    if ($host == "_dmarc.com" and $options == ["type" => "txt"])
+        return ["error" => "NO_DATA"];
+    throw "dns_query($host)";
+});
+if ($result != [
+        "policy" => ["p" => "none", "v" => "DMARC1"],
+        "pdomain" => "example.com",
+        "orgdomain" => "example.com"])
+    throw $result;
+else
+    echo " OK";

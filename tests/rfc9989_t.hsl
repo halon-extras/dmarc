@@ -41,13 +41,17 @@ $res = dmarc_implementation(MailMessage::String($mail->toString()), "127.0.0.1",
         return ["error" => "NXDOMAIN"];
     if ($host == "_dmarc.example.com" and $options == ["type" => "txt"])
         return ["result" => ["v=DMARC1; p=reject; np=quarantine; sp=reject; t=Y"]];
+    if ($host == "_dmarc.com" and $options == ["type" => "txt"])
+        return ["error" => "NXDOMAIN"];
+    if ($host == "_dmarc.example2.com" and $options == ["type" => "txt"])
+        return ["error" => "NXDOMAIN"];
     throw "dns_query($host)";
 }, function($host) {
     global $dns;
     if ($host == "spaceship._domainkey.mydomain.example.com")
         return ["result" => $dns];
     throw "dkim_dns_query($host)";
-});
+}, ["rfc9989" => true]);
 
 if ($res["spf_align"] == "unaligned" and
     $res["dkim_align"] == "unaligned" and

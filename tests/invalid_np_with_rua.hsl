@@ -1,0 +1,34 @@
+import { dmarc_implementation } from "file://dmarc.hsl";
+
+echo "test invalid np= with rua (non-existent subdomain, treated as p=none)";
+
+$mail = MIME();
+$mail->addHeader("From", "erik@another.example.com");
+$mail->setBody("Hello");
+
+$res = dmarc_implementation(MailMessage::String($mail->toString()), "127.0.0.1", "", "example2.com", function($ip, $helo, $sender) {
+    throw "spf_query($ip, $helo, $sender)";
+}, function($host, $options = []) {
+    if ($host == "_dmarc.another.example.com" and $options == ["type" => "txt"])
+        return ["error" => "NXDOMAIN"];
+    if ($host == "another.example.com" and $options == ["type" => "soa"])
+        return ["error" => "NXDOMAIN"];
+    if ($host == "_dmarc.example.com" and $options == ["type" => "txt"])
+        return ["result" => ["v=DMARC1; p=reject; np=bogus; rua=mailto:x@example.com"]];
+    if ($host == "_dmarc.com" and $options == ["type" => "txt"])
+        return ["error" => "NXDOMAIN"];
+    if ($host == "_dmarc.example2.com" and $options == ["type" => "txt"])
+        return ["error" => "NXDOMAIN"];
+    throw "dns_query($host)";
+}, function($host) {
+    throw "dkim_dns_query($host)";
+}, ["rfc9989" => true]);
+
+if ($res["spf_align"] == "unaligned" and
+    $res["dkim_align"] == "unaligned" and
+    $res["result"] == "none" and
+    $res["pdomain"] == "example.com" and
+    $res["policy"] == "none")
+    echo " OK";
+else
+    throw $res;

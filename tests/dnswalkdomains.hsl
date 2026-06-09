@@ -1,0 +1,45 @@
+import { dnsTreeWalkDomains } from "file://dmarc.hsl";
+
+echo "test dnsTreeWalkDomains";
+
+$result = dnsTreeWalkDomains("example.com");
+if ($result != ["example.com", "com"])
+    throw $result;
+
+$result = dnsTreeWalkDomains("com");
+if ($result != ["com"])
+    throw $result;
+
+$result = dnsTreeWalkDomains("a.b.c.d.e.f.g.h.i.j.mail.example.com");
+if ($result != ["a.b.c.d.e.f.g.h.i.j.mail.example.com",
+                "g.h.i.j.mail.example.com",
+                "h.i.j.mail.example.com",
+                "i.j.mail.example.com",
+                "j.mail.example.com",
+                "mail.example.com",
+                "example.com",
+                "com"])
+    throw $result;
+
+$result = dnsTreeWalkDomains("g.h.i.j.mail.example.com");
+if ($result != ["g.h.i.j.mail.example.com",
+                "h.i.j.mail.example.com",
+                "i.j.mail.example.com",
+                "j.mail.example.com",
+                "mail.example.com",
+                "example.com",
+                "com"])
+    throw $result;
+
+$result = dnsTreeWalkDomains("f.g.h.i.j.mail.example.com");
+if ($result != ["f.g.h.i.j.mail.example.com",
+                "g.h.i.j.mail.example.com",
+                "h.i.j.mail.example.com",
+                "i.j.mail.example.com",
+                "j.mail.example.com",
+                "mail.example.com",
+                "example.com",
+                "com"])
+    throw $result;
+
+echo " OK";

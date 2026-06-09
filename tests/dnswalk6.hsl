@@ -1,0 +1,16 @@
+import { dnsWalk } from "file://dmarc.hsl";
+
+echo "test dnsWalk with organizational domain with psd=y (author domain)";
+
+$result = dnsWalk("a.b.example.com", function($host, $options = []) {
+    if ($host == "_dmarc.a.b.example.com" and $options == ["type" => "txt"])
+        return ["result" => ["v=DMARC1; p=reject; psd=y"]];
+    throw "dns_query($host)";
+});
+if ($result != [
+        "policy" => ["p" => "reject", "psd" => "y", "v" => "DMARC1"],
+        "pdomain" => "a.b.example.com",
+        "orgdomain" => "a.b.example.com"])
+    throw $result;
+else
+    echo " OK";

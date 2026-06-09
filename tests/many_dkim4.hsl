@@ -47,7 +47,7 @@ $res = dmarc_implementation(MailMessage::String($mail->toString()), "127.0.0.1",
     if ($host =~ #/^spaceship[1-9]\._domainkey\.example\.com/)
         return ["error" => "permfail"];
     throw "dkim_dns_query($host)";
-}, ["dkimheaders" => 2]);
+}, ["maxdkimheaders" => 2]);
 
 if ($res["spf_align"] == "pass" and
     $res["dkim_align"] == "pass" and
@@ -82,7 +82,7 @@ $res = dmarc_implementation(MailMessage::String($mail->toString()), "127.0.0.1",
     if ($host =~ #/^spaceship[1-9]\._domainkey\.example\.com/)
         return ["error" => "permfail"];
     throw "dkim_dns_query($host)";
-}, ["dkimheaders" => 2]);
+}, ["maxdkimheaders" => 2]);
 
 if ($res["spf_align"] == "pass" and
     $res["dkim_align"] == "fail" and
