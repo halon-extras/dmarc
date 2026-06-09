@@ -213,7 +213,9 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 	if ($rfc9989 and isset($tagList["t"]))
 		$selected = $tagList["t"] == "y" ? false : true;
 
-	$result["pct-selected"] = $selected;
+	if (!$rfc9989)
+		$result["pct-selected"] = $selected;
+
 	$result["spf_align"] = $checkSPF ? ($passSPF ? "pass": "fail") : "unaligned";
 	$result["dkim_align"] = ($checkDKIM and $dkimAligned) ? ($passDKIM ? "pass": "fail") : "unaligned";
 
