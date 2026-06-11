@@ -8,7 +8,7 @@ $result = dnsWalk("a.b.example.com", function($host, $options = []) {
     if ($host == "_dmarc.b.example.com" and $options == ["type" => "txt"])
         return ["error" => "NO_DATA"];
     if ($host == "_dmarc.example.com" and $options == ["type" => "txt"])
-        return ["result" => ["v=DMARC1; p=reject; psd=n"]];
+        return ["result" => ["v=DMARC1; p=reject; psd=N"]];
     throw "dns_query($host)";
 });
 if ($result != [

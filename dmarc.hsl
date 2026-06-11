@@ -288,7 +288,7 @@ function getValidDMARCRecord($records)
 				$k = str_lower($k);
 				$r[$k] = match ($k) {
 					"v" => $v, // case sensitive
-					"adkim", "aspf", "fo", "p", "rf", "sp", "np", "t" => str_lower($v),
+					"adkim", "aspf", "fo", "p", "rf", "sp", "np", "t", "psd" => str_lower($v),
 					default => $v // other fields, leave as is for now...
 				};
 			}
