@@ -119,11 +119,12 @@ function dmarc_implementation($mail, $ipaddr, $helo, $mfrom, $spf_query, $dns_qu
 			if ($rfc9989)
 			{
 				$lookup = dnsWalk($domain1, $dns_query);
-				if ($lookup["result"] == "policy_absent")
-					return false;
 				if ($lookup["result"] == "temperror")
 					return none;
-				$domainOrg1 = $lookup["orgdomain"];
+				if ($lookup["result"] == "policy_absent")
+					$domainOrg1 = $domain1;
+				else
+					$domainOrg1 = $lookup["orgdomain"];
 			}
 			else
 			{
